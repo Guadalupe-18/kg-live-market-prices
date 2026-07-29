@@ -28,27 +28,26 @@ async function fetchFromAlphaVantage(symbol: string, apiKey: string) {
   const def = SYMBOLS[symbol];
 
   if (def.kind === "metal") {
-    const url = `https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency=${def.av}&to_currency=USD&apikey=${apiKey}`;
+    const url = `https://www.alphavantage.co/query?function=GOLD_SILVER_SPOT&symbol=${def.av}&apikey=${apiKey}`;
     const res = await fetch(url);
     const data = await res.json();
-    const rate = data?.["Realtime Currency Exchange Rate"];
-    const price = rate?.["5. Exchange Rate"];
+    const price = data?.price;
     if (!price) {
-      throw new Error(data?.Note || data?.Information || data?.error?.message || "Alpha Vantage returned no exchange rate data");
+      throw new Error(data?.Note || data?.Information || data?.["Error Message"] || "Alpha Vantage returned no spot price data");
     }
     return {
       price: parseFloat(price),
-      sourceTimestamp: `${rate["6. Last Refreshed"]} ${rate["7. Time Zone"] || "UTC"}`,
+      sourceTimestamp: data.timestamp,
     };
   }
 
-  const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${def.av}&entitlement=realtime&apikey=${apiKey}`;
+  const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${def.av}&apikey=${apiKey}`;
   const res = await fetch(url);
   const data = await res.json();
   const quote = data?.["Global Quote"];
   const price = quote?.["05. price"];
   if (!price) {
-    throw new Error(data?.Note || data?.Information || data?.error?.message || "Alpha Vantage returned no quote data");
+    throw new Error(data?.Note || data?.Information || data?.["Error Message"] || "Alpha Vantage returned no quote data");
   }
   return {
     price: parseFloat(price),
