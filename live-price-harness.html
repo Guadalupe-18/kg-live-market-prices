@@ -1,0 +1,77 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>live price harness</title></head>
+<body>
+<div>
+  <span id="livePrice">-</span>
+  <span id="liveChg">-</span>
+  <span id="liveBadge">...</span>
+  <div id="updatedAt">-</div>
+  <div id="genDate">-</div>
+</div>
+<pre id="log"></pre>
+<script>
+const ACTIVE = 'XAUUSD';
+const ACTIVE_TF = 'daily';
+const DATA = { meta: { spot_price_live: 3300.00, last_close: 3295.00, spot_timestamp: 'BUILD-TIME-STATIC', last_close_date: '2026-07-25' } };
+const LIVE_ENDPOINT = 'https://kg-live-market-prices.netlify.app/live-price';
+const LIVE_SYMBOL_MAP = { XAUUSD:'XAU', XAGUSD:'XAG' };
+const liveCache = {};
+
+async function fetchLivePrice(pairSymbol){
+  const avSymbol = LIVE_SYMBOL_MAP[pairSymbol];
+  if(!avSymbol){ liveCache[pairSymbol] = { ok:false, error:'no live feed configured for this instrument' }; }
+  else {
+    try{
+      const res = await fetch(`${LIVE_ENDPOINT}?symbol=${avSymbol}`, { cache:'no-store' });
+      const data = await res.json();
+      if(data && data.error) throw new Error(data.error);
+      if(!data || typeof data.price !== 'number') throw new Error('malformed live-price response');
+      liveCache[pairSymbol] = { ok:true, price:data.price, sourceTimestamp:data.sourceTimestamp, stale: !!data.stale };
+    } catch(err){
+      liveCache[pairSymbol] = { ok:false, error: String(err && err.message || err) };
+    }
+  }
+  document.getElementById('log').textContent += 'fetch resolved: ' + JSON.stringify(liveCache[pairSymbol]) + '\n';
+  if(ACTIVE === pairSymbol) renderLiveHeader();
+}
+
+function renderLiveHeader(){
+  const symbol = ACTIVE;
+  const cache = liveCache[symbol];
+  const priceEl = document.getElementById('livePrice');
+  const chgEl = document.getElementById('liveChg');
+  const updatedEl = document.getElementById('updatedAt');
+  const badgeEl = document.getElementById('liveBadge');
+  const tfWord = ACTIVE_TF==='daily' ? "today's" : `vs last ${ACTIVE_TF.slice(0,-2)} close`;
+
+  let price, tsLine, badgeCls, badgeText;
+  if(cache === null || cache === undefined){
+    price = DATA.meta.spot_price_live;
+    tsLine = 'Fetching live price... (showing build-time reference: ' + DATA.meta.spot_timestamp + ')';
+    badgeCls = 'loading'; badgeText = '...';
+  } else if(cache.ok){
+    price = cache.price;
+    tsLine = (cache.stale ? 'Live spot (cached): ' : 'Live spot: ') + cache.sourceTimestamp;
+    badgeCls = cache.stale ? 'stale' : 'live';
+    badgeText = cache.stale ? 'Cached' : 'Live';
+  } else {
+    price = DATA.meta.spot_price_live;
+    tsLine = 'Live feed unavailable -- showing static reference price (generated ' + DATA.meta.spot_timestamp + ')';
+    badgeCls = 'static'; badgeText = 'Not live';
+  }
+
+  priceEl.textContent = '$' + price.toFixed(2);
+  const chg = price - DATA.meta.last_close;
+  const chgPct = (chg/DATA.meta.last_close*100);
+  chgEl.textContent = (chg>=0?'+':'') + chg.toFixed(2) + ' (' + (chgPct>=0?'+':'') + chgPct.toFixed(2) + '%) ' + tfWord;
+  chgEl.className = 'chg ' + (chg>=0 ? 'up':'down');
+  updatedEl.textContent = tsLine + `\nLast ${ACTIVE_TF} close: ` + DATA.meta.last_close_date;
+  document.getElementById('genDate').textContent = (cache && cache.ok) ? cache.sourceTimestamp : DATA.meta.spot_timestamp;
+  badgeEl.textContent = badgeText;
+  badgeEl.className = 'live-badge ' + badgeCls;
+}
+
+document.getElementById('log').textContent += 'starting fetch for XAUUSD...\n';
+fetchLivePrice('XAUUSD');
+</script>
+</body></html>
